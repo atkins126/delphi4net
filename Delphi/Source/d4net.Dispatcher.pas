@@ -29,10 +29,10 @@ type
       class function ListServiceNames: TArray<string>;
    end;
 
-   TDispatcher<T: class, constructor> = class(TDispatcher, IDispatcher)
+   TDispatcher<TContext: class, constructor> = class(TDispatcher, IDispatcher)
    strict protected
       procedure AfterRequest; virtual;
-      procedure BeforeRequest(AContext: T); virtual;
+      procedure BeforeRequest(AContext: TContext); virtual;
    public
       procedure DispatchRequest(AServiceName, AMethodName, AContextInfo, ARequestData: string; ASuccessProc,
           AErrorProc: TResultProc);
@@ -48,20 +48,20 @@ uses
 
 { TDispatcher<T> }
 
-procedure TDispatcher<T>.AfterRequest;
+procedure TDispatcher<TContext>.AfterRequest;
 begin
 end;
 
-procedure TDispatcher<T>.BeforeRequest(AContext: T);
+procedure TDispatcher<TContext>.BeforeRequest(AContext: TContext);
 begin
 end;
 
-procedure TDispatcher<T>.DispatchRequest(AServiceName, AMethodName, AContextInfo, ARequestData: string;
+procedure TDispatcher<TContext>.DispatchRequest(AServiceName, AMethodName, AContextInfo, ARequestData: string;
     ASuccessProc, AErrorProc: TResultProc);
 var
    LServiceClass: TServiceClass;
    LServiceInstance: TServiceBase;
-   LContext: T;
+   LContext: TContext;
    LResponseData: string;
 begin
    FLogger.Info('Processing request: ServiceName=' + AServiceName + ' MethodName=' + AMethodName +
@@ -73,7 +73,7 @@ begin
       if not FServiceClasses.TryGetValue(AServiceName, LServiceClass) then
          raise EServiceNotFound.Create(AServiceName);
 
-      LContext := T.Create;
+      LContext := TContext.Create;
 
       try
          FJsonSerializer.Deserialize(AContextInfo, LContext);
@@ -82,7 +82,14 @@ begin
          raise;
       end;
 
-      LServiceInstance := TServiceBase(Instantiate(LServiceClass, [TValue.From<T>(LContext)]));
+      LServiceInstance := TServiceBase(Instantiate(LServiceClass));
+
+      with TRttiContext.Create do
+      try
+         GetType(LServiceInstance.ClassType).GetField('FContext').SetValue(LServiceInstance, LContext);
+      finally
+         Free;
+      end;
 
       try
          BeforeRequest(LContext);
@@ -217,6 +224,7 @@ begin
       begin
          LRequestData := Instantiate(TRttiInstanceType(LMethodParams[0].ParamType).MetaClassType);
          FJsonSerializer.Deserialize(ARequestData, LRequestData);
+         LInvokeArgs[0] := LRequestData;
       end;
 
       if LMethod.ReturnType <> nil then
