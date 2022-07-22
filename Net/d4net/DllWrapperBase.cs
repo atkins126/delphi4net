@@ -5,6 +5,7 @@ These methods can't be in the base class because the name of the dll file will v
 another.
 */
 
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace d4net;
@@ -13,17 +14,19 @@ public delegate void LogAction(ushort level, [MarshalAs(UnmanagedType.BStr)] str
 
 public delegate void ResultAction([MarshalAs(UnmanagedType.BStr)] string result);
 
-public abstract class DelphiDllWrapperBase : IDelphiDll
+public abstract class DllWrapperBase : IDllWrapper
 {
     private LogAction _logAction;
 
-    protected DelphiDllWrapperBase() {
+    protected DllWrapperBase() {
         // Need to keep a reference to the delegates or they get garbage collected
         _logAction = Log;
         InvokeSetLogProc(_logAction);
     }
 
-    public void Execute(EndpointInfo endpointInfo, string? contextInfo,
+    public string Name => GetType().GetCustomAttribute<DllNameAttribute>()?.Value ?? "";
+
+    public virtual void Execute(EndpointInfo endpointInfo, string? contextInfo,
         string? requestData, Action<string?> successAction, Action<string?> errorAction) {
         void OnSuccess(string data) {
             successAction(data == "" ? null : data);
